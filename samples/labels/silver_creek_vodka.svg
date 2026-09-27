@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000" viewBox="0 0 800 1000">
+  <!-- Intentionally non-compliant sample: warning lead-in is title case (not ALL CAPS)
+       and the ABV printed differs from the application, to demonstrate failures. -->
+  <rect width="800" height="1000" fill="#eaf2f7"/>
+  <rect x="30" y="30" width="740" height="940" fill="none" stroke="#1c3d5a" stroke-width="6"/>
+  <text x="400" y="150" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="58" font-weight="bold" fill="#1c3d5a">SILVER CREEK</text>
+  <text x="400" y="215" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="46" font-weight="bold" fill="#1c3d5a">VODKA</text>
+  <line x1="150" y1="255" x2="650" y2="255" stroke="#3f6f95" stroke-width="3"/>
+  <text x="400" y="340" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="30" fill="#2a5170">Premium Distilled Vodka</text>
+  <text x="400" y="470" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="34" font-weight="bold" fill="#1c3d5a">40% Alc./Vol. (80 Proof)</text>
+  <text x="400" y="530" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="30" fill="#1c3d5a">750 mL</text>
+  <text x="400" y="600" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="20" fill="#2a5170">Produced by Silver Creek Spirits, Portland, Oregon</text>
+  <line x1="150" y1="640" x2="650" y2="640" stroke="#3f6f95" stroke-width="2"/>
+  <foreignObject x="90" y="680" width="620" height="260">
+    <div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,sans-serif;font-size:16px;color:#1a1a1a;text-align:justify;line-height:1.35;">
+      <span style="font-weight:bold;">Government Warning:</span> (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.
+    </div>
+  </foreignObject>
+</svg>

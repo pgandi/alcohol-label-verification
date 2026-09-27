@@ -1,0 +1,27 @@
+# Build output
+bin/
+obj/
+out/
+[Dd]ebug/
+[Rr]elease/
+publish/
+
+# .NET
+*.user
+*.suo
+project.lock.json
+.vs/
+
+# Rider / VS Code
+.idea/
+.vscode/
+
+# User secrets & local config (never commit keys)
+secrets.json
+*.local.json
+appsettings.*.local.json
+.env
+
+# OS
+.DS_Store
+Thumbs.db

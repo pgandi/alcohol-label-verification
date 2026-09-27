@@ -1,0 +1,171 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@inject LabelVerificationService Svc
+
+<PageTitle>Verify a Label</PageTitle>
+
+<div class="page-header">
+    <h1>Verify a Label</h1>
+    <p class="lead">Upload the label photo, enter the application details, and check them in one step.</p>
+</div>
+
+@if (!Svc.IsLive)
+{
+    <div class="banner banner-demo" role="note">
+        <strong>Demo mode.</strong> No AI key is configured, so sample label data is returned for every image.
+        Add an OpenAI or Azure OpenAI key (see the README) to read real labels.
+    </div>
+}
+
+<div class="verify-grid">
+    <section class="panel" aria-label="Label image">
+        <h2 class="panel-title">1. Label photo</h2>
+
+        <label class="upload-drop" for="single-file">
+            @if (_previewUrl is null)
+            {
+                <div class="upload-hint">
+                    <div class="upload-plus">+</div>
+                    <div>Click to choose a label image</div>
+                    <div class="upload-sub">JPG or PNG. Angled or slightly glared photos are OK.</div>
+                </div>
+            }
+            else
+            {
+                <img src="@_previewUrl" alt="Selected label preview" class="preview-img" />
+            }
+        </label>
+        <InputFile id="single-file" OnChange="OnImageSelected" accept="image/*" class="visually-hidden-file" />
+
+        @if (_previewUrl is not null)
+        {
+            <button type="button" class="btn-link-clear" @onclick="ClearImage">Choose a different image</button>
+        }
+    </section>
+
+    <section class="panel" aria-label="Application details">
+        <h2 class="panel-title">2. Application details</h2>
+
+        <div class="field">
+            <label for="brand">Brand name</label>
+            <input id="brand" @bind="_expected.BrandName" placeholder="e.g. OLD TOM DISTILLERY" />
+        </div>
+        <div class="field">
+            <label for="classtype">Class / type</label>
+            <input id="classtype" @bind="_expected.ClassType" placeholder="e.g. Kentucky Straight Bourbon Whiskey" />
+        </div>
+        <div class="field">
+            <label for="abv">Alcohol content</label>
+            <input id="abv" @bind="_expected.AlcoholContent" placeholder="e.g. 45% Alc./Vol. (90 Proof)" />
+        </div>
+        <div class="field">
+            <label for="net">Net contents</label>
+            <input id="net" @bind="_expected.NetContents" placeholder="e.g. 750 mL" />
+        </div>
+        <div class="field">
+            <label for="producer">Producer name / address</label>
+            <input id="producer" @bind="_expected.ProducerNameAddress" placeholder="e.g. Bottled by Old Tom Distillery, Bardstown, KY" />
+        </div>
+
+        <div class="field-check">
+            <input type="checkbox" id="isimport" @bind="_expected.IsImport" />
+            <label for="isimport">This is an imported product (check country of origin)</label>
+        </div>
+        @if (_expected.IsImport)
+        {
+            <div class="field">
+                <label for="country">Country of origin</label>
+                <input id="country" @bind="_expected.CountryOfOrigin" placeholder="e.g. Scotland" />
+            </div>
+        }
+
+        <button class="btn-verify" @onclick="Verify" disabled="@(_busy || _imageBytes is null)">
+            @if (_busy)
+            {
+                <span class="spinner" aria-hidden="true"></span>
+                <span>Checking...</span>
+            }
+            else
+            {
+                <span>Verify label</span>
+            }
+        </button>
+        @if (_imageBytes is null)
+        {
+            <div class="hint-muted">Choose a label image to enable verification.</div>
+        }
+    </section>
+</div>
+
+@if (_error is not null)
+{
+    <div class="banner banner-error" role="alert"><strong>Something went wrong:</strong> @_error</div>
+}
+
+@if (_result is not null)
+{
+    <section class="results-section" aria-label="Verification result">
+        <h2>Result</h2>
+        <ResultCard Result="_result" />
+    </section>
+}
+
+@code {
+    private readonly ExpectedFields _expected = new();
+    private byte[]? _imageBytes;
+    private string _mimeType = "image/jpeg";
+    private string? _previewUrl;
+    private VerificationResult? _result;
+    private bool _busy;
+    private string? _error;
+
+    private async Task OnImageSelected(InputFileChangeEventArgs e)
+    {
+        _error = null;
+        _result = null;
+        try
+        {
+            // Resize client-side to keep the payload small and processing under ~5s.
+            var resized = await e.File.RequestImageFileAsync("image/jpeg", 1280, 1280);
+            using var stream = resized.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            _imageBytes = ms.ToArray();
+            _mimeType = "image/jpeg";
+            _previewUrl = $"data:{_mimeType};base64,{Convert.ToBase64String(_imageBytes)}";
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not read that image: {ex.Message}";
+            _imageBytes = null;
+            _previewUrl = null;
+        }
+    }
+
+    private void ClearImage()
+    {
+        _imageBytes = null;
+        _previewUrl = null;
+        _result = null;
+    }
+
+    private async Task Verify()
+    {
+        if (_imageBytes is null) return;
+        _busy = true;
+        _error = null;
+        _result = null;
+        try
+        {
+            _result = await Svc.VerifyAsync(_imageBytes, _mimeType, _expected);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -1,0 +1,25 @@
+@* Small colored badge for a single field's match status. *@
+
+<span class="status-badge @CssClass" aria-label="@Text">@Text</span>
+
+@code {
+    [Parameter, EditorRequired] public MatchStatus Status { get; set; }
+
+    private string CssClass => Status switch
+    {
+        MatchStatus.Match => "status-pass",
+        MatchStatus.Review => "status-review",
+        MatchStatus.Mismatch => "status-fail",
+        MatchStatus.Missing => "status-fail",
+        _ => "status-neutral"
+    };
+
+    private string Text => Status switch
+    {
+        MatchStatus.Match => "PASS",
+        MatchStatus.Review => "REVIEW",
+        MatchStatus.Mismatch => "MISMATCH",
+        MatchStatus.Missing => "MISSING",
+        _ => "N/A"
+    };
+}

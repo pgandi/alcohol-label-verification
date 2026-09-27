@@ -1,0 +1,387 @@
+@page "/batch"
+@rendermode InteractiveServer
+@inject LabelVerificationService Svc
+@inject IJSRuntime JS
+
+<PageTitle>Batch Verify</PageTitle>
+
+<div class="page-header">
+    <h1>Batch Verify</h1>
+    <p class="lead">Upload a manifest of applications and a folder of label images to check them all at once.</p>
+</div>
+
+@if (!Svc.IsLive)
+{
+    <div class="banner banner-demo" role="note">
+        <strong>Demo mode.</strong> No AI key is configured, so sample label data is returned for every image.
+        Add a key (see the README) to read real labels.
+    </div>
+}
+
+<div class="batch-steps">
+    <section class="panel">
+        <h2 class="panel-title">1. Manifest (CSV)</h2>
+        <p class="hint-muted">
+            Columns: <code>filename, brand_name, class_type, alcohol_content, net_contents, producer, country_of_origin, is_import</code>.
+            One row per application. A sample is in <code>samples/batch_manifest.csv</code>.
+        </p>
+        <InputFile OnChange="OnManifestSelected" accept=".csv" />
+        @if (_manifestError is not null)
+        {
+            <div class="hint-error">@_manifestError</div>
+        }
+        else if (_manifest.Count > 0)
+        {
+            <div class="hint-ok">@_manifest.Count application(s) loaded.</div>
+        }
+    </section>
+
+    <section class="panel">
+        <h2 class="panel-title">2. Label images</h2>
+        <p class="hint-muted">Select all label images. File names must match the <code>filename</code> column.</p>
+        <InputFile OnChange="OnImagesSelected" accept="image/*" multiple />
+        @if (_loadingImages)
+        {
+            <div class="hint-muted"><span class="spinner spinner-sm"></span> Loading images...</div>
+        }
+        else if (_images.Count > 0)
+        {
+            <div class="hint-ok">@_images.Count image(s) loaded.</div>
+        }
+    </section>
+
+    <section class="panel">
+        <h2 class="panel-title">3. Run</h2>
+        <button class="btn-verify" @onclick="RunBatch" disabled="@(_running || _items.Count == 0)">
+            @if (_running)
+            {
+                <span class="spinner" aria-hidden="true"></span>
+                <span>Processing @_completed / @_items.Count ...</span>
+            }
+            else
+            {
+                <span>Verify @_items.Count label(s)</span>
+            }
+        </button>
+        @if (_items.Count == 0)
+        {
+            <div class="hint-muted">Load a manifest and images to build the queue.</div>
+        }
+    </section>
+</div>
+
+@if (_running || _completed > 0)
+{
+    <div class="progress-wrap" aria-label="Progress">
+        <div class="progress-bar" style="width:@ProgressPercent%"></div>
+    </div>
+}
+
+@if (_items.Count > 0)
+{
+    <section class="results-section">
+        <div class="batch-summary">
+            <span class="chip chip-pass">@_summaryPass Passed</span>
+            <span class="chip chip-review">@_summaryReview Review</span>
+            <span class="chip chip-fail">@_summaryFail Failed</span>
+            <span class="chip chip-neutral">@_summaryNoImage No image</span>
+            @if (_completed > 0)
+            {
+                <button class="btn-export" @onclick="ExportCsv">Export results (CSV)</button>
+            }
+        </div>
+
+        <table class="result-table batch-table">
+            <thead>
+                <tr>
+                    <th scope="col">File</th>
+                    <th scope="col">Brand</th>
+                    <th scope="col">Verdict</th>
+                    <th scope="col">Issues</th>
+                    <th scope="col">Detail</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in _items)
+                {
+                    <tr class="@RowClass(item)">
+                        <th scope="row">@item.FileName</th>
+                        <td>@item.Expected.BrandName</td>
+                        <td>@VerdictText(item)</td>
+                        <td>@(item.Result?.IssueCount.ToString() ?? "-")</td>
+                        <td class="detail">@DetailText(item)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+}
+
+@code {
+    private enum ItemState { Pending, Processing, Done, NoImage, Error }
+
+    private class BatchItem
+    {
+        public string FileName { get; set; } = "";
+        public ExpectedFields Expected { get; set; } = new();
+        public byte[]? ImageBytes { get; set; }
+        public VerificationResult? Result { get; set; }
+        public ItemState State { get; set; } = ItemState.Pending;
+        public string? Error { get; set; }
+    }
+
+    private List<ExpectedRow> _manifest = new();
+    private readonly Dictionary<string, byte[]> _images = new(StringComparer.OrdinalIgnoreCase);
+    private List<BatchItem> _items = new();
+
+    private string? _manifestError;
+    private bool _loadingImages;
+    private bool _running;
+    private int _completed;
+
+    private int ProgressPercent => _items.Count == 0 ? 0 : (int)(100.0 * _completed / _items.Count);
+
+    private int _summaryPass;
+    private int _summaryFail;
+    private int _summaryReview;
+    private int _summaryNoImage;
+
+    private class ExpectedRow
+    {
+        public string FileName { get; set; } = "";
+        public ExpectedFields Fields { get; set; } = new();
+    }
+
+    // ---- Manifest ----------------------------------------------------------
+
+    private async Task OnManifestSelected(InputFileChangeEventArgs e)
+    {
+        _manifestError = null;
+        _manifest = new();
+        try
+        {
+            using var reader = new StreamReader(e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024));
+            var text = await reader.ReadToEndAsync();
+            _manifest = ParseManifest(text);
+            if (_manifest.Count == 0)
+                _manifestError = "No rows found. Make sure the first row is a header and there is at least one data row.";
+        }
+        catch (Exception ex)
+        {
+            _manifestError = $"Could not read the manifest: {ex.Message}";
+        }
+        BuildQueue();
+    }
+
+    private static List<ExpectedRow> ParseManifest(string text)
+    {
+        var rows = SimpleCsv.Parse(text);
+        var result = new List<ExpectedRow>();
+        if (rows.Count < 2) return result;
+
+        var header = rows[0].Select(NormalizeHeader).ToList();
+        int Idx(params string[] names) => header.FindIndex(h => names.Contains(h));
+
+        int iFile = Idx("filename", "file", "image", "imagefile");
+        int iBrand = Idx("brandname", "brand");
+        int iClass = Idx("classtype", "class", "type");
+        int iAbv = Idx("alcoholcontent", "alcohol", "abv");
+        int iNet = Idx("netcontents", "net", "netcontent");
+        int iProd = Idx("producer", "producernameaddress", "bottler");
+        int iCountry = Idx("countryoforigin", "country");
+        int iImport = Idx("isimport", "import");
+
+        for (int r = 1; r < rows.Count; r++)
+        {
+            var cells = rows[r];
+            string Get(int i) => i >= 0 && i < cells.Count ? cells[i].Trim() : "";
+
+            var fileName = Get(iFile);
+            if (string.IsNullOrWhiteSpace(fileName)) continue;
+
+            var isImport = ParseBool(Get(iImport));
+            var country = Get(iCountry);
+
+            result.Add(new ExpectedRow
+            {
+                FileName = fileName,
+                Fields = new ExpectedFields
+                {
+                    BrandName = Get(iBrand),
+                    ClassType = Get(iClass),
+                    AlcoholContent = Get(iAbv),
+                    NetContents = Get(iNet),
+                    ProducerNameAddress = Get(iProd),
+                    CountryOfOrigin = country,
+                    IsImport = isImport || !string.IsNullOrWhiteSpace(country)
+                }
+            });
+        }
+        return result;
+    }
+
+    private static string NormalizeHeader(string h)
+        => new string(h.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+
+    private static bool ParseBool(string s)
+        => s.Trim().ToLowerInvariant() is "true" or "yes" or "y" or "1";
+
+    // ---- Images ------------------------------------------------------------
+
+    private async Task OnImagesSelected(InputFileChangeEventArgs e)
+    {
+        _loadingImages = true;
+        _images.Clear();
+        try
+        {
+            foreach (var file in e.GetMultipleFiles(maximumFileCount: 500))
+            {
+                try
+                {
+                    var resized = await file.RequestImageFileAsync("image/jpeg", 1280, 1280);
+                    using var stream = resized.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
+                    using var ms = new MemoryStream();
+                    await stream.CopyToAsync(ms);
+                    _images[file.Name] = ms.ToArray();
+                }
+                catch
+                {
+                    // Skip unreadable files; they'll show as "no image" if referenced.
+                }
+            }
+        }
+        finally
+        {
+            _loadingImages = false;
+        }
+        BuildQueue();
+    }
+
+    // ---- Queue + run -------------------------------------------------------
+
+    private void BuildQueue()
+    {
+        _items = _manifest.Select(m =>
+        {
+            _images.TryGetValue(m.FileName, out var bytes);
+            return new BatchItem
+            {
+                FileName = m.FileName,
+                Expected = m.Fields,
+                ImageBytes = bytes,
+                State = bytes is null ? ItemState.NoImage : ItemState.Pending
+            };
+        }).ToList();
+        _completed = 0;
+        RecalcSummary();
+    }
+
+    private async Task RunBatch()
+    {
+        _running = true;
+        _completed = 0;
+        foreach (var i in _items.Where(i => i.State != ItemState.NoImage))
+        {
+            i.State = ItemState.Pending;
+            i.Result = null;
+        }
+        RecalcSummary();
+
+        var toProcess = _items.Where(i => i.ImageBytes is not null).ToList();
+        using var gate = new SemaphoreSlim(4);
+        var tasks = new List<Task>();
+
+        foreach (var item in toProcess)
+        {
+            await gate.WaitAsync();
+            tasks.Add(Task.Run(async () =>
+            {
+                try
+                {
+                    item.State = ItemState.Processing;
+                    item.Result = await Svc.VerifyAsync(item.ImageBytes!, "image/jpeg", item.Expected);
+                    item.State = ItemState.Done;
+                }
+                catch (Exception ex)
+                {
+                    item.State = ItemState.Error;
+                    item.Error = ex.Message;
+                }
+                finally
+                {
+                    gate.Release();
+                    Interlocked.Increment(ref _completed);
+                    await InvokeAsync(() => { RecalcSummary(); StateHasChanged(); });
+                }
+            }));
+        }
+
+        await Task.WhenAll(tasks);
+        _running = false;
+        RecalcSummary();
+    }
+
+    private void RecalcSummary()
+    {
+        _summaryPass = _items.Count(i => i.Result is { OverallPass: true });
+        _summaryReview = _items.Count(i => i.Result is { OverallPass: false } && !HasHardFail(i.Result));
+        _summaryFail = _items.Count(i => i.Result is not null && HasHardFail(i.Result));
+        _summaryNoImage = _items.Count(i => i.State == ItemState.NoImage);
+    }
+
+    private static bool HasHardFail(VerificationResult r)
+        => !r.Readable
+           || r.Fields.Any(f => f.Status is MatchStatus.Mismatch or MatchStatus.Missing)
+           || r.Warning.Status is MatchStatus.Mismatch or MatchStatus.Missing;
+
+    // ---- Display + export --------------------------------------------------
+
+    private string VerdictText(BatchItem item) => item.State switch
+    {
+        ItemState.NoImage => "No image",
+        ItemState.Error => "Error",
+        ItemState.Processing => "...",
+        ItemState.Pending => "Queued",
+        _ => item.Result is null ? "-"
+            : item.Result.OverallPass ? "PASS"
+            : HasHardFail(item.Result) ? "FAIL" : "REVIEW"
+    };
+
+    private string DetailText(BatchItem item)
+    {
+        if (item.State == ItemState.NoImage) return "No matching image file was uploaded.";
+        if (item.State == ItemState.Error) return item.Error ?? "Unknown error.";
+        if (item.Result is null) return "";
+        if (!item.Result.Readable) return item.Result.UnreadableReason ?? "Image could not be read.";
+
+        var problems = item.Result.Fields.Where(f => !f.IsPass).Select(f => f.Field).ToList();
+        if (!item.Result.Warning.IsPass) problems.Add("Government Warning");
+        return problems.Count == 0 ? "All checks passed." : "Issues: " + string.Join(", ", problems);
+    }
+
+    private string RowClass(BatchItem item)
+    {
+        if (item.State == ItemState.NoImage) return "row-fail";
+        if (item.Result is null) return "";
+        return item.Result.OverallPass ? "row-pass" : HasHardFail(item.Result) ? "row-fail" : "row-review";
+    }
+
+    private async Task ExportCsv()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(SimpleCsv.Row("filename", "brand", "verdict", "issues", "detail", "provider", "ms"));
+        foreach (var item in _items)
+        {
+            sb.AppendLine(SimpleCsv.Row(
+                item.FileName,
+                item.Expected.BrandName,
+                VerdictText(item),
+                item.Result?.IssueCount.ToString() ?? "",
+                DetailText(item),
+                item.Result?.Provider ?? "",
+                item.Result?.ProcessingMs.ToString() ?? ""));
+        }
+        var fileName = $"label_verification_results_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+        await JS.InvokeVoidAsync("downloadTextFile", fileName, "text/csv", sb.ToString());
+    }
+}

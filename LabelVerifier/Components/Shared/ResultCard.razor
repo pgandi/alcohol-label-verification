@@ -1,0 +1,108 @@
+@* Renders a full VerificationResult: overall verdict + per-field breakdown. *@
+
+@if (Result is null)
+{
+    return;
+}
+
+<div class="result-card">
+    @if (!Result.Readable)
+    {
+        <div class="verdict verdict-unreadable" role="alert">
+            <div class="verdict-icon">!</div>
+            <div>
+                <div class="verdict-title">Image could not be read</div>
+                <div class="verdict-sub">@(string.IsNullOrWhiteSpace(Result.UnreadableReason)
+                    ? "Please request a clearer photo of the label."
+                    : Result.UnreadableReason)</div>
+            </div>
+        </div>
+    }
+    else
+    {
+        var verdictClass = Result.OverallPass ? "verdict-pass" : (HasHardFail ? "verdict-fail" : "verdict-review");
+        var verdictText = Result.OverallPass ? "PASS" : (HasHardFail ? "FAIL" : "NEEDS REVIEW");
+
+        <div class="verdict @verdictClass" role="status">
+            <div class="verdict-icon">@(Result.OverallPass ? "\u2713" : (HasHardFail ? "\u2717" : "!"))</div>
+            <div>
+                <div class="verdict-title">@verdictText</div>
+                <div class="verdict-sub">
+                    @if (Result.OverallPass)
+                    {
+                        <text>All fields match and the government warning is valid.</text>
+                    }
+                    else
+                    {
+                        <text>@Result.IssueCount item(s) need attention.</text>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <table class="result-table">
+            <thead>
+                <tr>
+                    <th scope="col">Field</th>
+                    <th scope="col">Application</th>
+                    <th scope="col">On Label</th>
+                    <th scope="col">Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in Result.Fields)
+                {
+                    <tr class="@RowClass(f)">
+                        <th scope="row">@f.Field</th>
+                        <td>@Display(f.Expected)</td>
+                        <td>@Display(f.Found)</td>
+                        <td>
+                            <StatusBadge Status="f.Status" />
+                            <div class="detail">@f.Detail</div>
+                        </td>
+                    </tr>
+                }
+
+                <tr class="@RowClass(Result.Warning) warning-row">
+                    <th scope="row">@Result.Warning.Field</th>
+                    <td colspan="2" class="warning-found">
+                        @if (string.IsNullOrWhiteSpace(Result.Warning.Found))
+                        {
+                            <em>Not found</em>
+                        }
+                        else
+                        {
+                            @Result.Warning.Found
+                        }
+                    </td>
+                    <td>
+                        <StatusBadge Status="Result.Warning.Status" />
+                        <div class="detail">@Result.Warning.Detail</div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    }
+
+    <div class="result-meta">
+        Read by @Result.Provider &middot; @Result.ProcessingMs ms
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public VerificationResult? Result { get; set; }
+
+    private bool HasHardFail =>
+        Result is not null &&
+        (Result.Fields.Any(f => f.Status is MatchStatus.Mismatch or MatchStatus.Missing)
+         || Result.Warning.Status is MatchStatus.Mismatch or MatchStatus.Missing);
+
+    private static string RowClass(FieldResult f) => f.Status switch
+    {
+        MatchStatus.Match => "row-pass",
+        MatchStatus.Review => "row-review",
+        _ => "row-fail"
+    };
+
+    private static string Display(string s) => string.IsNullOrWhiteSpace(s) ? "\u2014" : s;
+}

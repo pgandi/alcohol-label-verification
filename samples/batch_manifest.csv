@@ -1,0 +1,4 @@
+filename,brand_name,class_type,alcohol_content,net_contents,producer,country_of_origin,is_import
+old_tom_distillery.png,OLD TOM DISTILLERY,Kentucky Straight Bourbon Whiskey,45% Alc./Vol. (90 Proof),750 mL,"Bottled by Old Tom Distillery, Bardstown, Kentucky",,false
+silver_creek_vodka.png,SILVER CREEK VODKA,Premium Distilled Vodka,43% Alc./Vol. (86 Proof),750 mL,"Produced by Silver Creek Spirits, Portland, Oregon",,false
+highland_reserve_scotch.png,HIGHLAND RESERVE,Single Malt Scotch Whisky,43% Alc./Vol. (86 Proof),700 mL,"Distilled in Speyside, Scotland",Scotland,true

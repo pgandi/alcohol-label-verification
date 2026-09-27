@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000" viewBox="0 0 800 1000">
+  <rect width="800" height="1000" fill="#f5efe1"/>
+  <rect x="30" y="30" width="740" height="940" fill="none" stroke="#3b2a1a" stroke-width="6"/>
+  <text x="400" y="150" text-anchor="middle" font-family="Georgia, serif" font-size="60" font-weight="bold" fill="#3b2a1a">OLD TOM</text>
+  <text x="400" y="220" text-anchor="middle" font-family="Georgia, serif" font-size="52" font-weight="bold" fill="#3b2a1a">DISTILLERY</text>
+  <line x1="150" y1="260" x2="650" y2="260" stroke="#7a5a35" stroke-width="3"/>
+  <text x="400" y="340" text-anchor="middle" font-family="Georgia, serif" font-size="30" fill="#5a3f24">Kentucky Straight</text>
+  <text x="400" y="385" text-anchor="middle" font-family="Georgia, serif" font-size="30" fill="#5a3f24">Bourbon Whiskey</text>
+  <text x="400" y="480" text-anchor="middle" font-family="Georgia, serif" font-size="34" font-weight="bold" fill="#3b2a1a">45% Alc./Vol. (90 Proof)</text>
+  <text x="400" y="540" text-anchor="middle" font-family="Georgia, serif" font-size="30" fill="#3b2a1a">750 mL</text>
+  <text x="400" y="610" text-anchor="middle" font-family="Georgia, serif" font-size="20" fill="#5a3f24">Bottled by Old Tom Distillery, Bardstown, Kentucky</text>
+  <line x1="150" y1="650" x2="650" y2="650" stroke="#7a5a35" stroke-width="2"/>
+  <foreignObject x="90" y="690" width="620" height="260">
+    <div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,sans-serif;font-size:16px;color:#1a1a1a;text-align:justify;line-height:1.35;">
+      <span style="font-weight:bold;">GOVERNMENT WARNING:</span> (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.
+    </div>
+  </foreignObject>
+</svg>
